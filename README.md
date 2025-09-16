@@ -16,6 +16,7 @@ Example usage:
 from etl.api import run_etl_for_source, merge_masters, download_images_for_csv
 
 # Run ETL for a source
+# `rss_url` is optional if you have set it in your config; otherwise, provide it explicitly.
 run_etl_for_source(source="ynet", rss_url="https://www.ynet.co.il/Integration/StoryRss2.xml")
 
 # Merge master CSVs
@@ -51,6 +52,8 @@ Data, logs, and outputs live under `data/` and `logs/`.
 
 ## Installation (Windows PowerShell)
 
+> **Note:** `pyyaml` is required for YAML config overrides. It is included in `requirements.txt`, but ensure it is installed if you plan to use custom YAML configuration files.
+
 ```powershell
 # from repo root
 python -m venv .venv
@@ -64,6 +67,9 @@ etl.load.create_csv_to_load_by_source→ Compute per-source delta to load
 etl.load.merge_by_source             → Append into unified master (master_news.csv)
 
 Run the orchestrated pipeline per source using the built-in orchestrator. **Repeat for each source.**
+
+> **Important:** The merge step **must** be run only after all per-source ETLs are complete. This ensures the unified master contains all sources.
+
 After all sources are processed, run the merge step separately to update the unified master (`data/master/master_news.csv`).
 
 ```powershell
