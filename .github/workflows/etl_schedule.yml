@@ -42,9 +42,7 @@ jobs:
 
       - name: Merge all masters into unified master_news.csv
         run: |
-          python -m etl.load.merge_by_source --source data/master/master_ynet.csv --master data/master/master_news.csv
-          python -m etl.load.merge_by_source --source data/master/master_hayom.csv --master data/master/master_news.csv
-          python -m etl.load.merge_by_source --source data/master/master_haaretz.csv --master data/master/master_news.csv
+          python -m etl.load.merge_by_source --source data/master/master_ynet.csv data/master/master_hayom.csv data/master/master_haaretz.csv
 
       - name: List all CSVs before commit
         run: find . -name '*.csv'

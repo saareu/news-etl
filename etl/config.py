@@ -24,6 +24,8 @@ MASTER_HAYOM_CSV   = MASTER_DIR / "master_hayom.csv"
 MASTER_HAYOM_JSON  = MASTER_DIR / "master_hayom.json"
 MASTER_HAARETZ_CSV = MASTER_DIR / "master_haaretz.csv"
 MASTER_HAARETZ_JSON = MASTER_DIR / "master_haaretz.json"
+# Unified master for all sources
+MASTER_NEWS_CSV = MASTER_DIR / "master_news.csv"
 
 # Default filenames (override with CLI flags any time)
 YNET_ITEMS_JSON    = RAW_YNET_DIR / "ynet_items.json"

@@ -21,6 +21,8 @@ import csv
 import os
 from datetime import datetime
 from typing import Dict, List, Optional
+from pathlib import Path
+from etl.config import MASTER_NEWS_CSV
 
 
 def read_csv(path: str) -> List[Dict[str, str]]:
@@ -59,86 +61,68 @@ def get_id_key(row):
     # Handle BOM-prefixed id field
     return row.get('id') or row.get('\ufeffid')
 
-def merge_by_source(source_path: str, master_path: str) -> str:
-    source_rows = read_csv(source_path)
-    master_rows = read_csv(master_path)
-    print(f"[merge_by_source] source: {source_path} rows={len(source_rows)}; master: {master_path} rows={len(master_rows)}")
+def merge_by_source(source_paths: List[str], master_path: Optional[str] = None) -> str:
+    if master_path is None:
+        master_path = str(MASTER_NEWS_CSV)
+    else:
+        master_path = str(master_path)
+    # Ensure output directory exists
+    Path(master_path).parent.mkdir(parents=True, exist_ok=True)
+    all_rows = []
+    fieldnames: List[str] = []
+    seen_ids = set()
     def safe_print(msg):
         try:
             print(msg)
         except UnicodeEncodeError:
             print(msg.encode('ascii', errors='replace').decode('ascii', errors='replace'))
-    if source_rows:
-        safe_print(f"[merge_by_source] source fieldnames: {list(source_rows[0].keys())}")
-        safe_print(f"[merge_by_source] source first row: {repr(source_rows[0])}")
+    # Read all source CSVs
+    for source_path in source_paths:
+        rows = read_csv(source_path)
+        safe_print(f"[merge_by_source] source: {source_path} rows={len(rows)}")
+        if rows:
+            safe_print(f"[merge_by_source] source fieldnames: {list(rows[0].keys())}")
+            safe_print(f"[merge_by_source] source first row: {repr(rows[0])}")
+        for r in rows:
+            all_rows.append(r)
+            for k in r.keys():
+                if k not in fieldnames:
+                    fieldnames.append(k)
+    # Read existing master if present
+    master_rows = read_csv(master_path)
+    safe_print(f"[merge_by_source] master: {master_path} rows={len(master_rows)}")
     if master_rows:
         safe_print(f"[merge_by_source] master fieldnames: {list(master_rows[0].keys())}")
         safe_print(f"[merge_by_source] master first row: {repr(master_rows[0])}")
-
-    # Debug: print all id keys in master and source
-    master_ids = set(get_id_key(r) for r in master_rows if get_id_key(r))
-    source_ids = set(get_id_key(r) for r in source_rows if get_id_key(r))
-    safe_print(f"[merge_by_source] master id keys (sample 10): {list(master_ids)[:10]}")
-    safe_print(f"[merge_by_source] source id keys (sample 10): {list(source_ids)[:10]}")
-
-    # build set of keys present in master
-    existing_keys = set()
     for r in master_rows:
-        key = get_id_key(r)
-        if key:
-            existing_keys.add(key)
-
-    # collect new rows from source not in master
-    new_rows = []
-    for r in source_rows:
-        key = get_id_key(r)
-        if not key or key not in existing_keys:
-            new_rows.append(r)
-    safe_print(f"[merge_by_source] new rows to add: {len(new_rows)}")
-
-    if not new_rows:
-        # nothing to do; still ensure master exists and is sorted
-        if not master_rows and source_rows:
-            # master is empty, source has data: copy all source rows
-            combined = source_rows
-        else:
-            combined = master_rows
-    else:
-        combined = master_rows + new_rows
-
-    # dedupe by id preserving last occurrence
+        all_rows.append(r)
+        for k in r.keys():
+            if k not in fieldnames:
+                fieldnames.append(k)
+    # Deduplicate by id, preserving last occurrence
     deduped: Dict[str, Dict[str, str]] = {}
-    for r in combined:
+    for r in all_rows:
         key = get_id_key(r)
         if key is not None:
             deduped[key] = r
-
     rows = list(deduped.values())
-    print(f"[merge_by_source] after merge: unified master rows={len(rows)} (added {len(rows)-len(master_rows)})")
-
-    # sort by pubDate desc
+    safe_print(f"[merge_by_source] after merge: unified master rows={len(rows)} (added {len(rows)-len(master_rows)})")
+    # Sort by pubDate desc
     rows.sort(key=lambda r: parse_pubdate(r.get("pubDate")), reverse=True)
-
-    # determine fieldnames as union preserving order from master then source
-    fieldnames: List[str] = []
-    for src in (master_rows + source_rows):
-        for k in src.keys():
-            if k not in fieldnames:
-                fieldnames.append(k)
-
     write_csv(master_path, rows, fieldnames)
     return master_path
 
 
 def main(argv: Optional[List[str]] = None) -> int:
-    p = argparse.ArgumentParser(description="Append non-duplicated rows from a source master into a unified master CSV")
-    p.add_argument("--source", required=True, help="Relative path to source master CSV")
-    p.add_argument("--master", required=True, help="Relative path to unified master CSV to append into")
+    p = argparse.ArgumentParser(description="Append non-duplicated rows from one or more source masters into a unified master CSV")
+    p.add_argument("--source", nargs='+', required=True, help="Relative path(s) to source master CSV(s)")
+    p.add_argument("--master", required=False, help="Relative path to unified master CSV to append into (default: data/master/master_news.csv)")
     args = p.parse_args(argv)
 
-    if not os.path.exists(args.source):
-        print(f"source not found: {args.source}")
-        return 2
+    for src in args.source:
+        if not os.path.exists(src):
+            print(f"source not found: {src}")
+            return 2
 
     out = merge_by_source(args.source, args.master)
     print(os.path.relpath(out).replace("\\", "/"))
