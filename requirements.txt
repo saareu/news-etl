@@ -8,6 +8,8 @@ openpyxl>=3.1
 beautifulsoup4>=4.12
 xmltodict>=0.13
 requests>=2.31.0
+# YAML config
+pyyaml>=6.0
  
 # UI dependencies (optional)
 streamlit>=1.30
