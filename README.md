@@ -1,5 +1,43 @@
 # News ETL Pipeline
 
+This repo is designed for both standalone and embedded use. You can run the ETL pipeline as a CLI, or import and call it from another Python project.
+
+## Integration & API Usage
+
+### As a Python Library
+
+Install (in your project):
+```bash
+pip install /path/to/news-etl  # or pip install git+https://github.com/saareu/news-etl.git
+```
+
+Example usage:
+```python
+from etl.api import run_etl_for_source, merge_masters, download_images_for_csv
+
+# Run ETL for a source
+run_etl_for_source(source="ynet", rss_url="https://www.ynet.co.il/Integration/StoryRss2.xml")
+
+# Merge master CSVs
+merge_masters([
+    "data/master/master_ynet.csv",
+    "data/master/master_hayom.csv",
+    "data/master/master_haaretz.csv"
+])
+
+# Download images for a canonical CSV
+download_images_for_csv("data/canonical/ynet/ynet_..._canonical_enhanced.csv")
+```
+
+### As a CLI
+
+```bash
+python -m etl.cli run-etl --source ynet --rss https://www.ynet.co.il/Integration/StoryRss2.xml
+python -m etl.cli merge-masters --sources data/master/master_ynet.csv data/master/master_hayom.csv
+python -m etl.cli download-images --input data/canonical/ynet/ynet_..._canonical_enhanced.csv
+```
+
+
 ETL pipeline for processing RSS feeds from Israeli news sources (Ynet, Hayom, Haaretz) into canonical CSVs and unified masters. The pipeline is modular and CI-friendly and can be run end-to-end per source or step-by-step.
 
 ## Overview
@@ -105,9 +143,22 @@ data/
 
 ## Configuration
 
-- Default RSS URLs are in `etl/config.py`.
-- Canonical mapping is read from `etl/schema/mapping.csv`.
-- Enhancer selectors are read from `etl/enhance/selectors.csv`.
+All config is centralized in `etl/config.py`. You can override any config value by setting the `NEWS_ETL_CONFIG` environment variable to point to a YAML file with your overrides. Example:
+
+```yaml
+DATA_DIR: /custom/data/path
+YNET_RSS_URL: https://custom-ynet-url.example.com/rss
+```
+
+Then run:
+```powershell
+$env:NEWS_ETL_CONFIG = "C:/path/to/your_config.yaml"
+python -m etl.cli ...
+```
+
+Other config files:
+- Canonical mapping: `etl/schema/mapping.csv`
+- Enhancer selectors: `etl/enhance/selectors.csv`
 
 ### Time normalization
 Publication times are normalized to UTC with a fixed `+0000` suffix, regardless of source offset. Example: `Mon, 15 Sep 2025 23:16:57 +0300` → `Mon, 15 Sep 2025 23:16:57+0000`.
