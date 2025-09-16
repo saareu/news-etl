@@ -60,21 +60,27 @@ pip install -r requirements.txt
 
 ## Quick Start
 
-Run the orchestrated pipeline per source using the built-in orchestrator. Repeat for each source to build/update the unified master (`data/master/master_news.csv`).
+etl.load.create_csv_to_load_by_source→ Compute per-source delta to load
+etl.load.merge_by_source             → Append into unified master (master_news.csv)
+
+Run the orchestrated pipeline per source using the built-in orchestrator. **Repeat for each source.**
+After all sources are processed, run the merge step separately to update the unified master (`data/master/master_news.csv`).
 
 ```powershell
 # Ynet
 py -m etl.pipelines.etl_by_source --source ynet --rss https://www.ynet.co.il/Integration/StoryRss2.xml
 
 # Hayom
-for israel hayom, use: 
 py -m etl.pipelines.etl_by_source --source hayom --rss https://www.israelhayom.co.il/rss.xml --force-tz-offset 3
 
 # Haaretz
 py -m etl.pipelines.etl_by_source --source haaretz --rss https://www.haaretz.co.il/srv/htz---all-articles
+
+# Merge all per-source masters into the unified master (run after all sources)
+py -m etl.load.merge_by_source --source data/master/master_ynet.csv data/master/master_hayom.csv data/master/master_haaretz.csv
 ```
 ![alt text](<Drawing 1-1.png>)
-Each run executes the following steps:
+Each per-source run executes the following steps:
 
 ```
 etl.transform.extract_by_source      → Download & convert to CSV
@@ -84,8 +90,9 @@ etl.load.create_csv_to_load_by_source→ Compute per-source delta to load
 etl.load.enhancer_by_source          → Optional enrichment from article pages
 etl.pipelines.download_images        → Download images and sanitize text
 etl.load.load_by_source              → Update per-source master (master_{source}.csv)
-etl.load.merge_by_source             → Append into unified master (master_news.csv)
 ```
+
+**Note:** The merge step (`etl.load.merge_by_source`) is not part of the per-source pipeline and must be run separately after all sources.
 
 The final line printed by each step is the output file path consumed by the next step. The orchestrator wires this automatically.
 
@@ -121,8 +128,8 @@ py -m etl.pipelines.download_images --input data/canonical/ynet/ynet_..._canonic
 py -m etl.load.load_by_source --input data/canonical/ynet/ynet_..._master.csv --source ynet
 # Output: data/master/master_ynet.csv
 
-# 8) Append to unified master
-py -m etl.load.merge_by_source --source data/master/master_ynet.csv --master data/master/master_news.csv
+# 8) (After all sources) Append to unified master
+py -m etl.load.merge_by_source --source data/master/master_ynet.csv data/master/master_hayom.csv data/master/master_haaretz.csv --master data/master/master_news.csv
 ```
 
 ## Output Layout
@@ -161,7 +168,10 @@ Other config files:
 - Enhancer selectors: `etl/enhance/selectors.csv`
 
 ### Time normalization
-Publication times are normalized to UTC with a fixed `+0000` suffix, regardless of source offset. Example: `Mon, 15 Sep 2025 23:16:57 +0300` → `Mon, 15 Sep 2025 23:16:57+0000`.
+Publication times are normalized to a fixed timezone offset if the `--force-tz-offset` flag is provided (e.g., `--force-tz-offset 3` for `+03:00`).
+If not provided, the original timezone offset from the source is preserved when available.
+Example with flag: `Mon, 15 Sep 2025 23:16:57 +0300` + `--force-tz-offset 0` → `2025-09-15T23:16:57+00:00`
+Example without flag: `Mon, 15 Sep 2025 23:16:57 +0300` → `2025-09-15T23:16:57+03:00` (if the source provides offset)
 
 ### IDs and Deduplication
 - Canonical `id` is a SHA1 of `title|pubDate|source`.
@@ -175,7 +185,7 @@ Run each source hourly or as needed. Example Windows Task Scheduler action (run 
 ```powershell
 powershell.exe -ExecutionPolicy Bypass -NoProfile -Command "cd C:\code\news-etl; \
  py -m etl.pipelines.etl_by_source --source ynet --rss https://www.ynet.co.il/Integration/StoryRss2.xml; \
- py -m etl.pipelines.etl_by_source --source hayom --rss https://www.israelhayom.co.il/rss.xml; \
+ py -m etl.pipelines.etl_by_source --source hayom --rss https://www.israelhayom.co.il/rss.xml --force-tz-offset 3; \
  py -m etl.pipelines.etl_by_source --source haaretz --rss https://www.haaretz.co.il/srv/htz---all-articles"
 ```
 

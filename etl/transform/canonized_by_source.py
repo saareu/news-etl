@@ -5,28 +5,29 @@ Map an expanded per-source CSV into the canonical schema as described in
 `etl/schema/mapping.csv`.
 
 Usage:
-  python -m etl.transform.canonized_by_source --input data/raw/ynet/ynet_20250915_100534_expanded.csv
+    python -m etl.transform.canonized_by_source --input <expanded_csv>
 
 Behavior:
  - Requires an expanded CSV produced by `expand_by_source.py`.
  - Reads `etl/schema/mapping.csv` and for the detected source (derived from
-   the input path `data/raw/{source}/...`) maps source columns into canonical
-   columns.
+     the input path) maps source columns into canonical columns.
  - Supports concatenation specs in the mapping values. A concat spec uses
-   '+' to separate field names and delimiter tokens, e.g.
-       description_img_title+-+description_img_alt
-   This splits into tokens: ['description_img_title','-','description_img_alt']
-   Tokens at even indices are field names; tokens at odd indices are delimiters.
-   The script validates the structure and will error on malformed specs.
+     '+' to separate field names and delimiter tokens, e.g.
+             description_img_title+-+description_img_alt
+     This splits into tokens: ['description_img_title','-','description_img_alt']
+     Tokens at even indices are field names; tokens at odd indices are delimiters.
+     The script validates the structure and will error on malformed specs.
  - For concatenated fields, if all the joined values for a row are identical,
-   the result is that single value (no delimiters). Otherwise the values are
-   combined with the provided delimiters (preserving order).
+     the result is that single value (no delimiters). Otherwise the values are
+     combined with the provided delimiters (preserving order).
  - After mapping, the script computes a deterministic `id` (SHA1 of guid if
-   present else of title), infers `language` from the title (Hebrew -> 'he',
-   otherwise 'en'), and strips query params from `image` URLs (remove '?' and
-   everything after).
- - Writes canonical CSV into `data/canonical/{source}/{basename}_canonical.csv` and
-   prints the relative path as the final stdout line for subprocess chaining.
+     present else of title), infers `language` from the title (Hebrew -> 'he',
+     otherwise 'en'), and strips query params from `image` URLs (remove '?' and
+     everything after).
+ - Writes canonical CSV into a configurable directory (default: data/canonical/{source}/{basename}_canonical.csv`) and
+     prints the relative path as the final stdout line for subprocess chaining.
+
+All paths are configurable via etl/config.py and environment/YAML.
 """
 from __future__ import annotations
 
@@ -269,9 +270,11 @@ def build_canonical_rows(
 
 def main(argv=None) -> int:
 
-    p = argparse.ArgumentParser(description="Map expanded per-source CSV into canonical CSV using etl/schema/mapping.csv")
+
+    from etl.config import CANON_DIR
+    p = argparse.ArgumentParser(description="Map expanded per-source CSV into canonical CSV using etl/schema/mapping.csv. All paths are configurable via etl/config.py and environment/YAML.")
     p.add_argument("--input", required=True, help="Path to expanded input CSV")
-    p.add_argument("--output", help="Optional output path; if omitted, writes to data/canonical/{source}/<basename>_canonical.csv")
+    p.add_argument("--output", help=f"Optional output path; if omitted, writes to <CANON_DIR>/{{source}}/<basename>_canonical.csv (default: {CANON_DIR}/{{source}})")
     p.add_argument("--mapping", default="etl/schema/mapping.csv", help="Path to mapping CSV")
     p.add_argument("--force-tz-offset", type=int, default=None, help="Force output timezone offset in hours (e.g., 3 for +03:00, -5 for -05:00)")
     p.add_argument("--verbose", action="store_true")
@@ -321,7 +324,7 @@ def main(argv=None) -> int:
     if args.output:
         output_path = Path(args.output)
     else:
-        out_dir = Path("data") / "canonical" / source
+        out_dir = CANON_DIR / source
         out_dir.mkdir(parents=True, exist_ok=True)
         stem = input_path.stem
         output_path = out_dir / f"{stem}_canonical.csv"

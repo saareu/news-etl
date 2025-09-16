@@ -1,8 +1,12 @@
-"""Orchestrate the ETL pipeline for a single source.
+"""
+Orchestrate the ETL pipeline for a single source.
+
 
 Workflow per source:
-  extract_by_source -> expand_by_source -> canonized_by_source -> create_csv_to_load_by_source
-  -> enhancer_by_source -> download_images -> load_by_source -> merge_by_source
+    extract_by_source -> expand_by_source -> canonized_by_source -> create_csv_to_load_by_source
+    -> enhancer_by_source -> download_images -> load_by_source
+
+The merge_by_source step is NOT run here; it should be run separately after all sources, as in the CI workflow.
 
 Each step is called as a Python module (e.g. `py -m etl.extract.extract_by_source ...`).
 The script captures each step's final printed line (expected to be the output CSV relative path)
@@ -11,7 +15,7 @@ and passes it as the input of the next step.
 Designed to be non-interactive and CI-friendly (GitHub Actions): prints the final merged master at the end.
 
 for israel hayom, use:
-  py -m etl.pipelines.etl_by_source --source hayom --rss https://www.hayom.co.il/rss/news.xml --force-tz-offset 3
+    py -m etl.pipelines.etl_by_source --source hayom --rss https://www.hayom.co.il/rss/news.xml --force-tz-offset 3
 """
 from __future__ import annotations
 
@@ -30,7 +34,6 @@ STEPS = [
     "etl.load.enhancer_by_source",
     "etl.pipelines.download_images",
     "etl.load.load_by_source",
-    "etl.load.merge_by_source",
 ]
 
 
@@ -50,7 +53,6 @@ def orchestrate(
     source: str,
     rss: str,
     python_cmd: str = sys.executable,
-    master_unified: str = "data/master/master_news.csv",
     dry_run: bool = False,
     per_step_timeout: int = 300,
     per_step_retries: int = 1,
@@ -64,6 +66,7 @@ def orchestrate(
         "etl.load.enhancer_by_source",
         "etl.pipelines.download_images",
     }
+
 
     for idx, step in enumerate(STEPS, start=1):
         print(f"STEP {idx}/{len(STEPS)} -> {step} (current_input={current_input})")
@@ -84,8 +87,9 @@ def orchestrate(
             if not current_input:
                 raise RuntimeError("canonized_by_source requires an input path from a previous step")
             in_p = Path(current_input)
-            # place canonical output under data/canonical/{source}/<stem>_canonical.csv
-            can_dir = Path("data") / "canonical" / source
+            # place canonical output under CANON_DIR/{source}/<stem>_canonical.csv
+            from etl.config import CANON_DIR
+            can_dir = CANON_DIR / source
             can_dir.mkdir(parents=True, exist_ok=True)
             out_p = can_dir / f"{in_p.stem}_canonical.csv"
             args.extend(["--input", str(in_p), "--output", str(out_p)])
@@ -112,10 +116,6 @@ def orchestrate(
             if not current_input:
                 raise RuntimeError("load_by_source requires an input path from a previous step")
             args.extend(["--input", str(current_input)])
-        elif step == "etl.load.merge_by_source":
-            if not current_input:
-                raise RuntimeError("merge_by_source requires an input path from a previous step")
-            args.extend(["--source", str(current_input), "--master", master_unified])
         else:
             # Unknown step - pass current input if available
             if current_input:
@@ -158,14 +158,6 @@ def orchestrate(
                 print(f"produced: {out_path}")
             else:
                 print("no output path captured from step; passing previous input")
-            # After merge_by_source, explicitly log unified master existence
-            if step == "etl.load.merge_by_source":
-                from pathlib import Path as _P
-                mp = _P(master_unified)
-                if mp.exists():
-                    print(f"unified master exists: {mp} (size={mp.stat().st_size} bytes)")
-                else:
-                    print(f"WARNING: unified master expected but not found at {mp}")
             break
 
     print(f"final unified master: {current_input}")
@@ -173,11 +165,10 @@ def orchestrate(
 
 
 def main(argv: Optional[List[str]] = None) -> int:
-    p = argparse.ArgumentParser(description="Run full ETL pipeline for a single source")
+    p = argparse.ArgumentParser(description="Run full ETL pipeline for a single source. All paths are configurable via etl/config.py and environment/YAML.")
     p.add_argument("--source", required=True, help="Source name (eg. hayom)")
     p.add_argument("--rss", required=True, help="RSS feed URL for the source")
-    p.add_argument("--python", required=False, help="Python executable to use (defaults to current) ", default=sys.executable)
-    p.add_argument("--master-unified", required=False, help="Unified master CSV path", default="data/master/master_news.csv")
+    p.add_argument("--python", required=False, help="Python executable to use (defaults to current)", default=sys.executable)
     p.add_argument("--dry-run", action="store_true", help="Print commands without executing them")
     p.add_argument("--timeout", type=int, default=300, help="Per-step timeout in seconds (default: 300)")
     p.add_argument("--retries", type=int, default=1, help="Per-step retry count (default: 1)")
@@ -190,7 +181,6 @@ def main(argv: Optional[List[str]] = None) -> int:
         args.source,
         args.rss,
         python_cmd=args.python,
-        master_unified=args.master_unified,
         dry_run=args.dry_run,
         per_step_timeout=args.timeout,
         per_step_retries=args.retries,
