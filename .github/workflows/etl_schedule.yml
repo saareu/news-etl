@@ -40,6 +40,11 @@ jobs:
         run: |
           python -m etl.pipelines.etl_by_source --source haaretz --rss "https://www.haaretz.co.il/srv/htz---all-articles" --timeout 600 --retries 1
 
+      - name: Merge all masters into unified master_news.csv
+        run: |
+          python -m etl.load.merge_by_source --source data/master/master_ynet.csv --master data/master/master_news.csv
+          python -m etl.load.merge_by_source --source data/master/master_hayom.csv --master data/master/master_news.csv
+          python -m etl.load.merge_by_source --source data/master/master_haaretz.csv --master data/master/master_news.csv
 
       - name: Commit and push changes (if any)
         run: |
