@@ -49,6 +49,9 @@ jobs:
       - name: List all CSVs before commit
         run: find . -name '*.csv'
 
+      - name: Force add master CSVs
+        run: git add -f data/master/master_*.csv
+
       - name: Commit and push changes (if any)
         run: |
           git config user.name "github-actions[bot]"
