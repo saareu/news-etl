@@ -46,6 +46,9 @@ jobs:
           python -m etl.load.merge_by_source --source data/master/master_hayom.csv --master data/master/master_news.csv
           python -m etl.load.merge_by_source --source data/master/master_haaretz.csv --master data/master/master_news.csv
 
+      - name: List all CSVs before commit
+        run: find . -name '*.csv'
+
       - name: Commit and push changes (if any)
         run: |
           git config user.name "github-actions[bot]"
