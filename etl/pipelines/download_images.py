@@ -244,11 +244,18 @@ def perform_sync_downloads(rows: List[Dict[str, str]], stats: Dict[str, int]) ->
             row["imageName"] = ""
             stats["images_missing"] += 1
             continue
+        # Check if file already exists (avoid redownload)
+        if os.path.exists(dest):
+            row["image"] = os.path.relpath(dest).replace("\\", "/")
+            if row.get("imageNameRemote"):
+                row["imageName"] = str(row.get("imageNameRemote"))
+            else:
+                row["imageName"] = str(basename)
+            # Do not increment images_downloaded, as it was not downloaded now
+            continue
         succeeded = download_image(img_url, dest)
         if succeeded:
             row["image"] = os.path.relpath(dest).replace("\\", "/")
-            # imageName should be the remote original name (user requested)
-            # but the saved filename is based on id; we keep the original remote name in imageName
             if row.get("imageNameRemote"):
                 row["imageName"] = str(row.get("imageNameRemote"))
             else:
